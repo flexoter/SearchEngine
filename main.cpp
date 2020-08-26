@@ -16,6 +16,22 @@
 
 using namespace std;
 
+void TestSplitIntoWords() {
+  string some_string{
+    "some text that's  about to be splited"
+  };
+  vector<string_view> expected{
+    "some",
+    "text",
+    "that's",
+    "about",
+    "to",
+    "be",
+    "splited"
+  };
+  ASSERT_EQUAL(SplitIntoWords(some_string), expected);
+}
+
 void TestFunctionality(
   const vector<string>& docs,
   const vector<string>& queries,
@@ -205,6 +221,7 @@ void TestBasicSearch() {
 
 int main() {
   TestRunner tr;
+  RUN_TEST(tr, TestSplitIntoWords);
   RUN_TEST(tr, TestSerpFormat);
   RUN_TEST(tr, TestTop5);
   RUN_TEST(tr, TestHitcount);
