@@ -11,18 +11,24 @@
 
 using namespace std;
 
+const size_t WORDS_COUNT = 1000u;
+
 class InvertedIndex {
 public:
-  void Add(const string& document);
-  list<size_t> Lookup(const string& word) const;
+  InvertedIndex() {
+    docs.reserve(DOCUMENT_COUNT);
+  }
+  void Add(string document);
+  list<size_t> Lookup(string_view word) const;
 
   const string& GetDocument(size_t id) const {
     return docs[id];
   }
 
 private:
-  map<string, list<size_t> > index;
+  map<string_view, list<size_t> > index;
   vector<string> docs;
+  size_t DOCUMENT_COUNT = 50'000u;
 };
 
 class SearchServer {
