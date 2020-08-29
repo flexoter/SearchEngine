@@ -6,6 +6,8 @@
 #include <sstream>
 #include <iostream>
 #include <array>
+#include <vector>
+#include <map>
 
 vector<string_view> SplitIntoWords(string_view line) {
   vector<string_view> r;
@@ -13,7 +15,8 @@ vector<string_view> SplitIntoWords(string_view line) {
   size_t start = 0u, end = 0u;
   while(!line.empty()) {
     start = line.find_first_not_of(' ', 0u);
-    end = line.find(' ', start); 
+    end = line.find(' ', start);
+    start = start == line.npos ? 0u : start;
     r.push_back(line.substr(start, end - start));
     line.remove_prefix(end == line.npos ? line.size() : end + 1);
   }
@@ -30,59 +33,49 @@ void SearchServer::UpdateDocumentBase(istream& document_input) {
   for (string current_document; getline(document_input, current_document); ) {
     new_index.Add(move(current_document));
   }
-
-  index = move(new_index);
+  swap(_index, new_index);
 }
-
-int FindInsertionIndex(
-  const array<pair<size_t, size_t>, 5>& t_arr, size_t count, size_t id) {
-    int pos = -1;
-    bool is_found = false;
-    for (size_t index = 0u; index != t_arr.size(); index++) {
-      if (!is_found && count > t_arr[index].first) {
-        pos = index;
-        is_found = true;
-      }
-      if (t_arr[index].second == id) {
-        pos = index;
-        break;
-      }
-    }
-    return pos;
-  }
 
 void SearchServer::AddQueriesStream(
   istream& query_input, ostream& search_results_output
 ) {
   for (string current_query; getline(query_input, current_query); ) {
     const auto words = SplitIntoWords(current_query);
-    array<pair<size_t, size_t>, 5> search_results;
-    search_results.fill(make_pair(0u, DOCUMENT_COUNT + 1));
+    vector<pair<size_t, size_t> > hit_counts;
+    hit_counts.resize(_index.GetDocumentCount(), make_pair(0u, 0u));
+    
 
-    map<size_t, size_t> hit_counts;
     for (auto word : words) {
-      auto [succ, it] = index.Lookup(word);
+      const auto [succ, it] = _index.Lookup(word);
       if (!succ) {
         continue;
       }
-      for (const size_t id : it->second) {
-        auto& count = ++hit_counts[id];
-        int pos = FindInsertionIndex(search_results, count, id);
-        if (pos != -1) {
-          search_results[pos].first = count;
-          search_results[pos].second = id;
-        }
+      for (const auto [id, count] : it->second) {
+        auto& [pair_id, hits] = hit_counts[id];
+        pair_id = id;
+        hits += count;
       }
     }
-    sort(
-      search_results.begin(),
-      search_results.end(),
+    vector<pair<size_t, size_t> > results(5u);
+    partial_sort_copy(
+      hit_counts.begin(),
+      hit_counts.end(),
+      results.begin(),
+      results.end(),
       [](pair<size_t, size_t> lhs, pair<size_t, size_t> rhs) -> bool
-      {return lhs.first > rhs.first;}
+      {
+        if (lhs.second > rhs.second) {
+          return true;
+        }
+        if (lhs.second == rhs.second) {
+          return lhs.first < rhs.first;
+        } 
+        return false;
+      }
     );
 
     search_results_output << current_query << ':';
-    for (auto [hitcount, docid] : search_results) {
+    for (const auto [docid, hitcount] : results) {
       if (hitcount == 0) {
         break;
       }
@@ -95,17 +88,30 @@ void SearchServer::AddQueriesStream(
 }
 
 void InvertedIndex::Add(string document) {
-  docs.push_back(move(document));
+  _docs.push_back(move(document));
 
-  const size_t docid = docs.size() - 1;
-  for (auto word : SplitIntoWords(docs.back())) {
-    index[word].push_back(docid);
+  const size_t docid = _docs.size() - 1;
+  for (auto word : SplitIntoWords(_docs.back())) {
+    auto& id_list = _stats[word];
+    if (id_list.empty()) {
+      id_list.reserve(DOCUMENT_PER_WORD);
+    }
+    if (id_list.back().first != docid || docid == 0) {
+      id_list.push_back(make_pair(docid, 1u));
+      continue;
+    }
+    id_list.back().second++;
   }
 }
 
-using MapIt = map<string_view, list<size_t> >::const_iterator;
-pair<bool, MapIt> InvertedIndex::Lookup(string_view word) const {
-  auto it = index.find(word);
-  bool is_found = it == index.end() ? false : true;
-  return make_pair(is_found, it);
+using MapIt = map<string_view, vector<pair<size_t, size_t>> >::const_iterator;
+pair<bool, MapIt>
+InvertedIndex::Lookup(string_view word) {
+  bool r_succ = false;
+  auto r_it = _stats.end();
+  if (const auto it = _stats.find(word); it != _stats.end()) {
+    r_succ = true;
+    r_it = it;
+  }
+  return make_pair(r_succ, r_it);
 }
