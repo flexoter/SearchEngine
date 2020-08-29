@@ -1,6 +1,8 @@
-#pragma once
+#ifndef H_ITERATOR_RANGE
+#define H_ITERATOR_RANGE
 
 #include <algorithm>
+
 using namespace std;
 
 template <typename It>
@@ -29,3 +31,5 @@ template <typename Container>
 auto Head(Container& c, int top) {
   return IteratorRange(begin(c), begin(c) + min<size_t>(max(top, 0), c.size()));
 }
+
+#endif /*H_ITERATOR_RANGE*/
