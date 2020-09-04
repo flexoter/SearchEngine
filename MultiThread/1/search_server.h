@@ -2,6 +2,7 @@
 #define H_SEARCH_SERVER
 
 #include "synchronized.h"
+#include "iterator_range.h"
 
 #include <istream>
 #include <ostream>
@@ -19,9 +20,10 @@ const size_t WORDS_COUNT = 50;
 const size_t DOCUMENT_COUNT = 11'000u;
 const size_t CORES_COUNT = 16u;
 const size_t DOCUMENT_PER_WORD = 2000u;
+const size_t STREAMS_COUNT = 100u;
+const size_t QUERIES_COUNT = 12'000u;
 
 vector<string_view> SplitIntoWords(string_view line);
-// vector<string> SplitIntoWords(const string& line);
 
 class InvertedIndex {
 public:
@@ -50,7 +52,10 @@ class SearchServer {
 public:
   SearchServer()
   : _index()
+  , _streams_begin(0u)
+  , _streams_end(STREAMS_COUNT)
   {
+    _streams.reserve(QUERIES_COUNT);
   }
   explicit SearchServer(istream& document_input);
   void UpdateDocumentBaseSingleThread(istream& document_input);
@@ -61,11 +66,20 @@ public:
 private:
   Synchronized<InvertedIndex>_index;
   vector<future<void> > _futures;
+  vector<pair<istream*, ostream*> > _streams;
+  size_t _streams_count;
+  size_t _streams_begin;
+  size_t _streams_end;
 };
 
 void AddQueriesStreamSingleThread(
   istream& query_input,
   ostream& search_results_output,
   Synchronized<InvertedIndex>& index);
+
+using StreamsIt = vector<pair<istream*, ostream*> >::iterator;
+void AddQueriesStreamMultiThread(
+  IteratorRange<StreamsIt>,
+  Synchronized<InvertedIndex>&);
 
 #endif /*H_SEARCH_SERVER*/

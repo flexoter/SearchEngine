@@ -23,12 +23,8 @@ vector<string_view> SplitIntoWords(string_view line) {
   return r;
 }
 
-// vector<string> SplitIntoWords(const string& line) {
-//   istringstream words_input(line);
-//   return {istream_iterator<string>(words_input), istream_iterator<string>()};
-// }
-
 SearchServer::SearchServer(istream& document_input) {
+  _streams.reserve(QUERIES_COUNT);
   SearchServer::UpdateDocumentBaseSingleThread(document_input);
 }
 
@@ -66,7 +62,6 @@ void AddQueriesStreamSingleThread(
     }
     array<pair<size_t, size_t>, 5u > results;
     results.fill(make_pair(0u, 0u));
-    // vector<pair<size_t, size_t> > results(5u);
     partial_sort_copy(
       hit_counts.begin(),
       hit_counts.end(),
@@ -97,10 +92,34 @@ void AddQueriesStreamSingleThread(
   }
 }
 
+using StreamsIt = vector<pair<istream*, ostream*> >::iterator;
+void AddQueriesStreamMultiThread(IteratorRange<StreamsIt> range, Synchronized<InvertedIndex>& index) {
+  for (auto& [input_stream, output_stream] : range) {
+    AddQueriesStreamSingleThread(*input_stream, *output_stream, index);
+  }
+}
+
 void SearchServer::AddQueriesStream(
   istream& query_input, ostream& search_results_output
 ) {
-  _futures.push_back(async(launch::async, &AddQueriesStreamSingleThread, ref(query_input), ref(search_results_output), ref(_index)));
+  if (_index.GetAccess().ref_to_value.GetDocumentCount() < DOCUMENT_COUNT) {
+    AddQueriesStreamSingleThread(query_input, search_results_output, _index);
+  } else {
+    _streams.push_back(make_pair(&query_input, &search_results_output));
+    _streams_count++;
+    if (_streams_count == STREAMS_COUNT) {
+      _streams_count = 0;
+      _futures.push_back(async(
+        launch::async,
+        &AddQueriesStreamMultiThread,
+        IteratorRange(
+          _streams.begin() + _streams_begin,
+          _streams.begin() + _streams_end),
+        ref(_index)));  
+        _streams_begin = _streams_end;
+        _streams_end = _streams_begin + STREAMS_COUNT;
+    }
+  }
 }
 
 void InvertedIndex::Add(string document) {
