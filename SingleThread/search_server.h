@@ -13,8 +13,6 @@ using namespace std;
 
 const size_t WORDS_COUNT = 1000u;
 const size_t DOCUMENT_COUNT = 50'000u;
-const size_t WORD_LENGTH = 100u;
-const size_t CORES_COUNT = 4u;
 const size_t DOCUMENT_PER_WORD = 4000u;
 
 vector<string_view> SplitIntoWords(string_view line);
